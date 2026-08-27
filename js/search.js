@@ -184,13 +184,16 @@ function renderProfessionals(professionals) {
       <p class="bio">${escapeHtml(professional.bio || 'Sem apresentação ainda.')}</p>
       <div class="pro-foot">
         <strong>${formatPrice(professional)}</strong>
-        <button class="btn primary ask" type="button">Pedir serviço</button>
+        <button class="btn primary ask" type="button" data-professional="${professional.user_id}">Pedir serviço</button>
       </div>
     </article>
   `).join('');
 
   document.querySelectorAll('.ask').forEach((button) => {
-    button.onclick = () => requestHandler();
+    button.onclick = () => {
+      const professional = professionals.find((item) => item.user_id === button.dataset.professional);
+      requestHandler(professional || null);
+    };
   });
 }
 
