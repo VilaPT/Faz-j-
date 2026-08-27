@@ -10,7 +10,7 @@ on:
       - main
 
 jobs:
-  unit-tests:
+  quality-checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -20,6 +20,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Check JavaScript syntax
+        run: npm run check
 
       - name: Run unit tests
         run: npm test
