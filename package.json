@@ -1,0 +1,13 @@
+{
+  "name": "fazja-portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check app.js && node --check account.js && node --check js/auth.js && node --check js/config.js && node --check js/memberships.js && node --check js/professionals.js && node --check js/requests.js && node --check js/search.js && node --check js/supabase.js && node --check js/utils.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
