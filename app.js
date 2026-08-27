@@ -1,11 +1,8 @@
 import { supabase as S } from './js/supabase.js';
 import { daysUntil, escapeHtml as esc } from './js/utils.js';
 import { getSession, initAuth, requireAuth } from './js/auth.js';
-import {
-  getSearchContext,
-  initSearch,
-  resolveSkill,
-} from './js/search.js';
+import { initSearch } from './js/search.js';
+import { initRequests, openRequest, requestService } from './js/requests.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -15,10 +12,6 @@ let plan = null;
 
 function open(id) {
   $(id)?.classList.add('open');
-}
-
-function close(id) {
-  $(id)?.classList.remove('open');
 }
 
 function toast(message) {
@@ -90,11 +83,19 @@ async function refreshSessionUi(nextSession) {
   renderSessionUi();
 }
 
+function requestProfessionalMode() {
+  if (!requireAuth('pro', 'professional')) return;
+  session = getSession();
+  openPro();
+}
+
 async function init() {
   document.querySelectorAll('[data-close]').forEach((button) => {
     button.onclick = () => button.closest('.modal')?.classList.remove('open');
   });
   $('homeBtn').onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('proCta').onclick = requestProfessionalMode;
+  initRequests();
 
   session = await initAuth({
     onSessionChange: (nextSession) => {
@@ -111,7 +112,7 @@ async function init() {
   const [searchData, planResult] = await Promise.all([
     initSearch({
       getSession,
-      onRequest: () => need('request'),
+      onRequest: requestService,
     }),
     S.from('professional_plan')
       .select('id,name,trial_days,monthly_price_eur,billing_enabled')
@@ -128,51 +129,9 @@ async function init() {
   )).join('');
 }
 
-function need(action) {
-  const accountType = action === 'pro' ? 'professional' : 'client';
-  if (!requireAuth(action, accountType)) return;
-
-  session = getSession();
-  if (action === 'pro') openPro();
-  if (action === 'request') openRequest();
-}
-
-$('saveDemand').onclick = () => need('request');
-$('proCta').onclick = () => need('pro');
-
-function openRequest() {
-  const context = getSearchContext();
-  $('reqDesc').value = context.query || context.skill?.name || '';
-  $('reqCity').value = context.city;
-  open('requestModal');
-}
-
-$('requestForm').onsubmit = async (event) => {
-  event.preventDefault();
-  session = getSession();
-  if (!session) return need('request');
-
-  const description = $('reqDesc').value.trim();
-  const city = $('reqCity').value.trim();
-  const context = getSearchContext();
-  const skill = context.skill || resolveSkill(description);
-
-  const { error } = await S.from('service_requests').insert({
-    client_id: session.user.id,
-    skill_id: skill?.id || null,
-    raw_query: context.query || description,
-    description,
-    city,
-  });
-
-  $('reqMsg').className = `msg ${error ? 'err' : 'ok'}`;
-  $('reqMsg').textContent = error ? error.message : 'Pedido guardado ✓';
-  if (!error) setTimeout(() => close('requestModal'), 700);
-};
-
 async function openPro() {
   session = getSession();
-  if (!session) return need('pro');
+  if (!session) return requestProfessionalMode();
 
   await loadMembership();
   renderPlan();
@@ -203,7 +162,7 @@ async function openPro() {
 $('proForm').onsubmit = async (event) => {
   event.preventDefault();
   session = getSession();
-  if (!session) return need('pro');
+  if (!session) return requestProfessionalMode();
 
   const selectedIds = [...$('pskills').selectedOptions].map((option) => Number(option.value));
   if (!selectedIds.length) {
