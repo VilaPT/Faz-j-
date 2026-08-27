@@ -9,12 +9,14 @@ let currentContact = null;
 let channel = null;
 let onChanged = () => {};
 let bound = false;
+let selectedRating = 0;
 
 const statusMap = {
   open: 'Em conversa',
   matched: 'Em conversa',
   accepted: 'Proposta aceite',
   in_progress: 'Em curso',
+  awaiting_client_confirmation: 'A aguardar confirmação do cliente',
   completed: 'Concluído',
   declined: 'Profissional desistiu',
   cancelled: 'Cancelado',
@@ -29,6 +31,7 @@ function closeChat() {
   currentRequest = null;
   currentProposal = null;
   currentContact = null;
+  selectedRating = 0;
 }
 
 function role() {
@@ -97,6 +100,33 @@ function renderProposal() {
   `;
 }
 
+function bindRatingButtons() {
+  document.querySelectorAll('[data-review-rating]').forEach((button) => {
+    button.addEventListener('click', () => {
+      selectedRating = Number(button.dataset.reviewRating);
+      document.querySelectorAll('[data-review-rating]').forEach((star) => {
+        star.classList.toggle('on', Number(star.dataset.reviewRating) <= selectedRating);
+      });
+      const confirm = $('confirmCompletion');
+      if (confirm) confirm.disabled = !selectedRating;
+    });
+  });
+}
+
+function renderClientCompletion() {
+  return `
+    <div class="review-panel">
+      <strong>O profissional marcou o trabalho como terminado.</strong>
+      <span>Confirma a conclusão e deixa a tua avaliação global.</span>
+      <div class="review-stars" aria-label="Avaliação de 1 a 5 estrelas">
+        ${[1,2,3,4,5].map((rating) => `<button type="button" data-review-rating="${rating}" aria-label="${rating} estrelas">★</button>`).join('')}
+      </div>
+      <textarea id="reviewComment" rows="2" maxlength="1000" placeholder="Comentário opcional"></textarea>
+      <button class="chat-action accept" id="confirmCompletion" type="button" disabled>Confirmar conclusão e avaliar</button>
+    </div>
+  `;
+}
+
 function renderActions() {
   const actions = $('chatActions');
   const proposalForm = $('proposalForm');
@@ -107,7 +137,9 @@ function renderActions() {
   proposalForm.classList.add('hidden');
 
   if (terminal) {
-    actions.innerHTML = '<span class="chat-terminal">Este pedido está encerrado.</span>';
+    actions.innerHTML = currentRequest.status === 'completed'
+      ? '<span class="chat-terminal">Serviço concluído e confirmado pelo cliente.</span>'
+      : '<span class="chat-terminal">Este pedido está encerrado.</span>';
     $('chatInput').disabled = true;
     $('chatSend').disabled = true;
     return;
@@ -117,6 +149,13 @@ function renderActions() {
   $('chatSend').disabled = false;
 
   if (currentRole === 'client') {
+    if (currentRequest.status === 'awaiting_client_confirmation') {
+      actions.innerHTML = renderClientCompletion();
+      bindRatingButtons();
+      $('confirmCompletion')?.addEventListener('click', confirmCompletionAndReview);
+      return;
+    }
+
     const pending = currentProposal?.status === 'pending';
     actions.innerHTML = `
       <button class="chat-action accept" id="acceptProposal" type="button" ${pending ? '' : 'disabled'}>Aceitar proposta</button>
@@ -129,14 +168,19 @@ function renderActions() {
     return;
   }
 
+  if (currentRequest.status === 'awaiting_client_confirmation') {
+    actions.innerHTML = '<span class="chat-terminal">Trabalho marcado como terminado. A aguardar confirmação e avaliação do cliente.</span>';
+    return;
+  }
+
   if (currentRequest.status === 'accepted' || currentRequest.status === 'in_progress') {
     const waze = wazeUrl();
     actions.innerHTML = `
       ${waze ? `<a class="chat-action go" href="${waze}" target="_blank" rel="noopener">Ir até</a>` : '<button class="chat-action go" type="button" disabled>Ir até</button>'}
-      <button class="chat-action accept" id="completeService" type="button">Pedido concluído</button>
+      <button class="chat-action accept" id="completeService" type="button">Trabalho terminado</button>
       <button class="chat-action danger" id="withdrawRequest" type="button">Desistir do pedido</button>
     `;
-    $('completeService')?.addEventListener('click', completeService);
+    $('completeService')?.addEventListener('click', markWorkDone);
     $('withdrawRequest')?.addEventListener('click', withdrawRequest);
     return;
   }
@@ -155,17 +199,10 @@ function renderMessages(messages) {
   if (!container || !session) return;
 
   container.innerHTML = messages.length ? messages.map((message) => {
-    if (message.kind === 'system') {
-      return `<div class="chat-system">${escapeHtml(message.body)}</div>`;
-    }
+    if (message.kind === 'system') return `<div class="chat-system">${escapeHtml(message.body)}</div>`;
     const mine = message.sender_id === session.user.id;
     const sender = mine ? 'Tu' : role() === 'client' ? 'Profissional' : 'Cliente';
-    return `
-      <div class="chat-message ${mine ? 'mine' : ''}">
-        <small>${sender}</small>
-        <p>${escapeHtml(message.body)}</p>
-      </div>
-    `;
+    return `<div class="chat-message ${mine ? 'mine' : ''}"><small>${sender}</small><p>${escapeHtml(message.body)}</p></div>`;
   }).join('') : '<div class="chat-empty">Escreve a primeira mensagem.</div>';
 
   container.scrollTop = container.scrollHeight;
@@ -220,11 +257,7 @@ async function sendMessage(event) {
     kind: 'message',
     body,
   });
-
-  if (error) {
-    window.alert('Não foi possível enviar a mensagem.');
-    return;
-  }
+  if (error) { window.alert('Não foi possível enviar a mensagem.'); return; }
   input.value = '';
 }
 
@@ -256,10 +289,7 @@ async function decideProposal(decision) {
     p_proposal_id: currentProposal.id,
     p_decision: decision,
   });
-  if (error) {
-    window.alert('Não foi possível registar a decisão.');
-    return;
-  }
+  if (error) { window.alert('Não foi possível registar a decisão.'); return; }
   await refreshChat();
   onChanged();
 }
@@ -267,10 +297,7 @@ async function decideProposal(decision) {
 async function cancelService() {
   if (!currentRequest || !window.confirm('Desistir deste serviço?')) return;
   const { error } = await S.rpc('client_cancel_service_request', { p_request_id: currentRequest.id });
-  if (error) {
-    window.alert('Não foi possível desistir do serviço.');
-    return;
-  }
+  if (error) { window.alert('Não foi possível desistir do serviço.'); return; }
   await refreshChat();
   onChanged();
 }
@@ -278,21 +305,29 @@ async function cancelService() {
 async function withdrawRequest() {
   if (!currentRequest || !window.confirm('Desistir deste pedido?')) return;
   const { error } = await S.rpc('professional_withdraw_service_request', { p_request_id: currentRequest.id });
-  if (error) {
-    window.alert('Não foi possível desistir do pedido.');
-    return;
-  }
+  if (error) { window.alert('Não foi possível desistir do pedido.'); return; }
   await refreshChat();
   onChanged();
 }
 
-async function completeService() {
-  if (!currentRequest || !window.confirm('Marcar este serviço como concluído?')) return;
-  const { error } = await S.rpc('professional_complete_service_request', { p_request_id: currentRequest.id });
-  if (error) {
-    window.alert('Não foi possível concluir o serviço.');
-    return;
-  }
+async function markWorkDone() {
+  if (!currentRequest || !window.confirm('Marcar o trabalho como terminado e pedir confirmação ao cliente?')) return;
+  const { error } = await S.rpc('professional_mark_work_done', { p_request_id: currentRequest.id });
+  if (error) { window.alert('Não foi possível marcar o trabalho como terminado.'); return; }
+  await refreshChat();
+  onChanged();
+}
+
+async function confirmCompletionAndReview() {
+  if (!currentRequest || !selectedRating) return;
+  const comment = $('reviewComment')?.value.trim() || '';
+  const { error } = await S.rpc('client_confirm_and_review', {
+    p_request_id: currentRequest.id,
+    p_rating: selectedRating,
+    p_comment: comment || null,
+  });
+  if (error) { window.alert('Não foi possível confirmar a conclusão e guardar a avaliação.'); return; }
+  selectedRating = 0;
   await refreshChat();
   onChanged();
 }
@@ -327,7 +362,7 @@ export function initChat({ onRequestChange = () => {} } = {}) {
 export async function openServiceChat(requestId) {
   const session = getSession();
   if (!session || !requestId) return;
-
+  selectedRating = 0;
   currentRequest = { id: requestId };
   $('chatModal')?.classList.add('open');
   $('chatMessages').innerHTML = '<div class="chat-empty">A carregar conversa…</div>';
