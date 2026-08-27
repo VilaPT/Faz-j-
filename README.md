@@ -2,7 +2,7 @@
 
 **Marketplace funcional de serviços locais** onde clientes pesquisam profissionais por problema, serviço ou categoria, e profissionais podem criar um perfil e disponibilizar os seus serviços.
 
-🔗 **Demo:** https://vilapt.github.io/Site/fazja/
+🔗 **Demo atual:** https://vilapt.github.io/Site/fazja/
 
 ## Problema
 
@@ -12,7 +12,7 @@ Encontrar um profissional local costuma obrigar o utilizador a procurar em vári
 
 ## Estado do projeto
 
-O Faz Já está atualmente em **beta funcional / protótipo de validação**. A aplicação já utiliza autenticação e dados reais através do Supabase, mas ainda não é apresentada como produto comercial terminado.
+O Faz Já está em **beta funcional / protótipo de validação**. A aplicação já utiliza autenticação, base de dados e regras de autorização reais através do Supabase, mas ainda não é apresentada como produto comercial terminado.
 
 ## Funcionalidades implementadas
 
@@ -35,7 +35,8 @@ O Faz Já está atualmente em **beta funcional / protótipo de validação**. A 
 ### Frontend
 - HTML5
 - CSS3
-- JavaScript ES6+ (Vanilla)
+- JavaScript ES Modules
+- DOM API
 
 ### Backend / dados
 - Supabase
@@ -44,30 +45,33 @@ O Faz Já está atualmente em **beta funcional / protótipo de validação**. A 
 - Row Level Security (RLS)
 - Triggers e funções PostgreSQL
 
-### Deploy e workflow
-- GitHub
-- GitHub Pages
-- Desenvolvimento iterativo assistido por IA, com validação técnica e testes manuais dos fluxos
+### Qualidade / workflow
+- Git e GitHub
+- Pull Requests
+- GitHub Actions
+- Node.js test runner (`node --test`)
+- Verificação automática de sintaxe dos módulos
 
-## Arquitetura
+## Arquitetura frontend
 
 ```text
-Browser
-  │
-  ├── UI / DOM / JavaScript
-  │
-  └── Supabase JS Client
-          │
-          ├── Auth
-          ├── PostgreSQL API
-          └── RLS
-                 │
-                 ├── profiles
-                 ├── professional_profiles
-                 ├── professional_skills
-                 ├── service_requests
-                 └── search_events
+index.html
+   │
+   ├── app.js                  # arranque / orquestração
+   ├── account.js              # área pessoal
+   │
+   └── js/
+       ├── config.js           # configuração pública
+       ├── supabase.js         # cliente Supabase partilhado
+       ├── utils.js            # funções puras
+       ├── auth.js             # autenticação e sessão
+       ├── search.js           # pesquisa, categorias e analytics
+       ├── requests.js         # pedidos de cliente
+       ├── memberships.js      # trial / subscrição
+       └── professionals.js    # perfil profissional
 ```
+
+Todos os módulos que precisam de dados reutilizam a mesma instância do Supabase em `js/supabase.js`.
 
 Mais detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -80,6 +84,23 @@ Mais detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - Profissionais apenas podem alterar os próprios dados e competências.
 - O estado de verificação profissional não pode ser alterado diretamente pelo browser.
 - O trial profissional é registado separadamente do perfil, evitando reinícios simples através da recriação do perfil.
+- Conteúdo introduzido por utilizadores é escapado antes de ser inserido em HTML gerado pela aplicação.
+
+## Testes e CI
+
+Os testes usam apenas ferramentas nativas do Node para manter o projeto leve.
+
+```bash
+npm run check
+npm test
+```
+
+`npm run check` valida a sintaxe dos módulos JavaScript e `npm test` executa os testes unitários. O GitHub Actions executa ambos automaticamente em alterações relevantes e Pull Requests para `main`.
+
+Os primeiros testes cobrem:
+- normalização de texto usada na pesquisa
+- escape de HTML
+- cálculo de dias restantes do trial
 
 ## Alguns problemas técnicos resolvidos
 
@@ -87,7 +108,7 @@ Mais detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Os primeiros emails de confirmação regressavam a `localhost:3000`. A configuração de Auth e o `emailRedirectTo` foram corrigidos para o URL público.
 
 ### Loop de renderização
-Um `MutationObserver` utilizado durante uma primeira abordagem aos ícones podia provocar um ciclo de alterações no DOM. A solução foi substituída por renderização determinística dos SVGs.
+Uma primeira abordagem aos ícones podia provocar um ciclo de alterações no DOM. A solução foi substituída por renderização determinística dos SVGs.
 
 ### Limite de emails
 Durante os testes foi identificado um `HTTP 429` causado pelo SMTP de desenvolvimento do Supabase. A aplicação passou a apresentar uma mensagem amigável e a próxima fase prevê SMTP dedicado.
@@ -95,25 +116,41 @@ Durante os testes foi identificado um `HTTP 429` causado pelo SMTP de desenvolvi
 ### Evolução cliente → profissional
 O modelo de conta foi ajustado para permitir que o mesmo utilizador comece como cliente e ative posteriormente o modo profissional, sem duplicar contas.
 
-## Estrutura
+### Refatoração do frontend
+A primeira versão concentrava autenticação, pesquisa, pedidos, perfis e trial num único `app.js`. A aplicação foi refatorada para módulos ES com responsabilidades explícitas e um cliente Supabase partilhado.
+
+## Estrutura do repositório
 
 ```text
 .
+├── .github/workflows/test.yml
 ├── index.html
 ├── styles.css
-├── app.js
 ├── account.css
+├── app.js
 ├── account.js
-├── auth-ui.js
+├── js/
+│   ├── auth.js
+│   ├── config.js
+│   ├── memberships.js
+│   ├── professionals.js
+│   ├── requests.js
+│   ├── search.js
+│   ├── supabase.js
+│   └── utils.js
+├── tests/
+│   └── utils.test.js
 ├── docs/
 │   ├── ARCHITECTURE.md
-│   └── PROJECT_STATE.md
+│   ├── PROJECT_STATE.md
+│   └── REFACTOR_PLAN.md
+├── package.json
 └── README.md
 ```
 
-## Próxima fase
+## Próxima fase funcional
 
-O principal desenvolvimento em curso é fechar o ciclo completo do marketplace:
+O principal desenvolvimento ainda em falta é fechar o ciclo completo do marketplace:
 
 **pedido → profissional → aceitação → execução → conclusão → histórico → avaliação**
 
@@ -124,10 +161,10 @@ Depois disso:
 - avaliações verificadas
 - painel de administração
 - pagamentos recorrentes
-- migração futura para TypeScript / Next.js se o produto justificar
+- eventual migração para TypeScript / Next.js quando trouxer benefício real ao produto
 
 ## O que este projeto demonstra
 
-Este projeto foi utilizado para praticar e consolidar conceitos de desenvolvimento web real, incluindo autenticação, modelação relacional, autorização, RLS, estados de negócio, debugging, deploy e evolução incremental de produto.
+O Faz Já foi utilizado para consolidar conceitos de desenvolvimento web aplicados a um produto real: autenticação, modelação relacional, autorização, RLS, estados de negócio, modularização, debugging, testes, CI e evolução incremental de produto.
 
-O objetivo do repositório não é apenas mostrar uma interface, mas documentar as decisões e os problemas técnicos encontrados durante a construção.
+O objetivo do repositório não é apenas mostrar uma interface, mas também tornar visíveis as decisões técnicas e a evolução da arquitetura.
