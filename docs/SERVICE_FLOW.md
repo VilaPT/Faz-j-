@@ -1,141 +1,106 @@
-# Fluxo de pedido, chat e serviço
+# Fluxo de pedido, chat, conclusão e avaliação
 
 Este documento descreve o fluxo funcional decidido para o Faz Já.
 
-## Princípio de privacidade
-
+## Privacidade
 - Apenas perfis profissionais são pesquisáveis e visíveis publicamente.
 - Contas de utilizador/cliente não têm perfil público pesquisável.
-- O telefone e a morada do cliente são dados privados da conta.
-- Esses dados só são partilhados com o profissional específico a quem o cliente envia um pedido.
-- Um profissional não consegue consultar dados privados de clientes que fizeram pedidos a outros profissionais.
-- O chat, as propostas e o histórico do pedido só podem ser consultados pelos dois participantes desse pedido.
+- Telefone e morada são dados privados da conta.
+- Num pedido dirigido, esses dados são copiados para o pedido e ficam acessíveis apenas ao profissional escolhido.
+- Chat, propostas e histórico só podem ser consultados pelos dois participantes.
 
 ## Início do pedido
-
-1. O utilizador encontra um perfil profissional.
+1. O utilizador encontra um profissional.
 2. Carrega em **Pedir serviço**.
-3. Para um pedido dirigido, a conta do cliente tem de ter telefone e morada preenchidos.
-4. O pedido é associado ao profissional escolhido.
-5. O sistema cria uma conversa privada ligada ao pedido.
-6. A conversa abre automaticamente para o cliente e aparece em **Pedidos recebidos** para o profissional.
+3. Para pedidos dirigidos, telefone e morada têm de estar preenchidos.
+4. O backend cria o pedido já associado ao profissional.
+5. É criada uma conversa privada.
+6. O profissional recebe uma notificação persistente de novo pedido.
 
-A morada é copiada para o pedido como destino do serviço. Assim, alterações posteriores à morada da conta não mudam silenciosamente o destino de um pedido já criado.
+Pedidos apenas guardados, sem profissional escolhido, continuam separados deste fluxo.
 
 ## Chat
+Ambos podem enviar mensagens e ver eventos do sistema. As conversas usam Supabase Realtime enquanto estão abertas.
 
-O chat é a fonte central do serviço.
-
-Ambos podem:
-- enviar mensagens;
-- ver mensagens do outro participante;
-- ver acontecimentos do sistema no histórico.
-
-Exemplos de acontecimentos do sistema:
-- Pedido enviado ao profissional.
-- O profissional enviou uma proposta de 45,00 €.
-- O utilizador aceitou a proposta.
-- O utilizador recusou a proposta.
-- O utilizador desistiu do serviço.
-- O profissional desistiu do pedido.
-- O profissional marcou o serviço como concluído.
-
-As alterações são propagadas através do Supabase Realtime quando a conversa está aberta.
+Eventos de sistema incluem criação do pedido, propostas, decisão da proposta, desistências, trabalho terminado, confirmação final e avaliação.
 
 ## Proposta
+O profissional pode **Enviar proposta** com valor e condições.
 
-O profissional dispõe de **Enviar proposta** no chat.
-
-Uma proposta contém:
-- valor em euros;
-- condições/notas opcionais;
-- estado.
-
-Estados da proposta:
-- `pending`
-- `accepted`
-- `rejected`
-- `withdrawn`
-
-Só pode existir uma proposta pendente por pedido de cada vez.
-
-## Ações do utilizador
-
-Além de **Enviar mensagem**, o utilizador tem:
+O cliente pode:
 - **Aceitar proposta**
 - **Recusar proposta**
 - **Desistir do serviço**
 
-Aceitar e recusar ficam indisponíveis quando não existe uma proposta pendente.
+O profissional pode:
+- enviar mensagens
+- enviar proposta
+- desistir do pedido
 
-Ao aceitar a proposta, o pedido passa para `accepted`.
-
-Ao recusar, a conversa continua aberta e o profissional pode enviar uma nova proposta.
-
-Ao desistir, o pedido é encerrado e a ação fica registada no histórico.
-
-## Ações do profissional
-
-Antes da aceitação:
-- **Enviar mensagem**
-- **Enviar proposta**
+## Após aceitação
+Depois de o cliente aceitar uma proposta, o profissional passa a ter:
+- **Ir até**, que abre o Waze com a morada privada do pedido
+- **Trabalho terminado**
 - **Desistir do pedido**
 
-Depois de uma proposta ser aceite:
-- **Enviar mensagem**
-- **Ir até**
-- **Pedido concluído**
-- **Desistir do pedido**
+O profissional não consegue concluir definitivamente o serviço sozinho.
 
-## Waze
+## Conclusão em duas fases
+1. O profissional carrega em **Trabalho terminado**.
+2. O pedido passa para `awaiting_client_confirmation`.
+3. O cliente recebe uma notificação persistente: **Confirma a conclusão do serviço**.
+4. Em **Pedidos**, o cliente vê o pedido destacado e abre a conversa.
+5. O cliente escolhe uma avaliação global de 1 a 5 estrelas e pode escrever um comentário opcional.
+6. **Confirmar conclusão e avaliar** é uma única operação atómica no backend.
+7. Só nesse momento o pedido passa para `completed`.
 
-O botão **Ir até** só é apresentado ao profissional depois de o serviço estar aceite.
+Assim, um profissional não pode fabricar serviços concluídos nem avaliações.
 
-O botão gera uma navegação Waze para a morada privada copiada para o pedido.
+## Avaliações e visibilidade
+Cada pedido concluído pode gerar apenas uma avaliação.
 
-A morada nunca é apresentada num perfil público.
+A avaliação é dada exclusivamente pelo cliente associado ao pedido e apenas depois de o profissional indicar que terminou o trabalho.
 
-## Contactos
+`professional_profiles` mantém dois campos calculados pelo backend:
+- `rating_average`
+- `rating_count`
 
-O profissional recebe o telefone do cliente quando recebe aquele pedido dirigido.
+O profissional não tem permissão para editar estes campos.
 
-O cliente pode aceder ao contacto do profissional dentro da relação criada pelo pedido.
+Na pesquisa, profissionais são ordenados por:
+1. disponibilidade atual
+2. média das avaliações
+3. número de avaliações
 
-O nome de conta do cliente não é usado como identidade pública no chat. Para o profissional, a outra parte é apresentada como **Cliente**.
+Os cartões mostram a média e o número de avaliações quando existirem.
 
-## Estados do pedido
+## Notificações
+`service_notifications` guarda notificações persistentes por utilizador.
 
-Estados utilizados atualmente:
+Exemplos:
+- novo pedido recebido
+- proposta enviada
+- proposta aceite/recusada
+- trabalho terminado a aguardar confirmação
+- serviço confirmado pelo cliente
+
+Há badges em **Pedidos** e **Profissional** e atualização por Realtime. Se a app estiver fechada, a notificação fica por ler e aparece quando o utilizador voltar.
+
+Push/email com a app totalmente fechada é uma fase posterior e requer infraestrutura externa de notificações/SMTP.
+
+## Estados principais
 - `open`
 - `matched`
 - `accepted`
 - `in_progress`
+- `awaiting_client_confirmation`
 - `completed`
 - `declined`
 - `cancelled`
 
-No fluxo atual, `open`/`matched` representam conversa/negociação antes da aceitação formal da proposta.
-
-## Tabelas relacionadas
-
-- `profiles`: identidade privada, telefone e morada da conta.
-- `professional_profiles`: dados públicos dos profissionais.
-- `service_requests`: pedido, participantes e snapshot privado do destino/contacto.
-- `service_messages`: mensagens e acontecimentos do sistema.
-- `service_proposals`: propostas formais.
-
 ## Segurança
-
-`service_messages` e `service_proposals` têm RLS.
-
-A leitura é permitida apenas quando `auth.uid()` corresponde ao cliente ou ao profissional do respetivo `service_request`.
-
-Mensagens normais só podem ser inseridas pelo utilizador autenticado como ele próprio. Acontecimentos de sistema e transições sensíveis são criados por funções de backend, não por texto confiado ao browser.
-
-## Notificações
-
-Na aplicação existe contador de pedidos novos para profissionais e atualização periódica da caixa de entrada.
-
-Dentro do chat, mensagens, propostas e alterações de estado utilizam Realtime.
-
-Notificações externas com a app fechada, por email ou push, continuam a ser uma fase posterior e dependem da configuração do serviço de email/notificações de produção.
+- `service_messages`, `service_proposals`, `service_notifications` e `professional_reviews` usam RLS.
+- Transições sensíveis são feitas por funções `SECURITY DEFINER` validadas no backend.
+- Pedidos dirigidos são criados por `create_targeted_service_request`, que valida profissional, utilizador, telefone e morada.
+- `client_confirm_and_review` confirma o serviço e cria a avaliação numa única transação.
+- A média profissional é recalculada pelo backend e não pode ser alterada pelo browser.
