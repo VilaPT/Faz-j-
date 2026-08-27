@@ -1,6 +1,7 @@
 import { supabase as S } from './supabase.js';
 import { getSession, requireAuth } from './auth.js';
 import { getSearchContext, resolveSkill } from './search.js';
+import { openServiceChat } from './chat.js';
 
 const $ = (id) => document.getElementById(id);
 let targetProfessional = null;
@@ -102,17 +103,17 @@ async function submitRequest(event) {
 
   const professionalName = targetProfessional?.public_name;
   setMessage(
-    professionalName ? `Pedido enviado a ${professionalName} ✓ A conversa já está aberta.` : 'Pedido guardado ✓',
+    professionalName ? `Pedido enviado a ${professionalName} ✓ A conversa vai abrir.` : 'Pedido guardado ✓',
     'ok',
   );
 
   if (targetProfessional && data?.id) {
     const requestId = data.id;
     targetProfessional = null;
-    setTimeout(() => {
+    setTimeout(async () => {
       closeModal();
-      window.dispatchEvent(new CustomEvent('fazja:open-chat', { detail: { requestId } }));
-    }, 700);
+      await openServiceChat(requestId);
+    }, 600);
     return;
   }
 
