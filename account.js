@@ -2,7 +2,7 @@ import { supabase as A } from './js/supabase.js';
 import { getSession } from './js/auth.js';
 import { requestProfessionalMode } from './js/professionals.js';
 import { getMembership, loadMembership, membershipState, trialDaysLeft } from './js/memberships.js';
-import { openServiceChat, initChat } from './js/chat.js';
+import { openServiceChat, initChat } from './js/chat.js?v=8';
 import { escapeHtml } from './js/utils.js';
 
 const $ = (id) => document.getElementById(id);
