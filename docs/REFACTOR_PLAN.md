@@ -21,18 +21,33 @@ js/
 └── app.js
 ```
 
-## Etapas
+## Progresso
 
-1. Extrair configuração pública e criação do cliente Supabase.
-2. Extrair funções utilitárias sem dependências de interface.
-3. Separar autenticação e sessão.
-4. Separar pesquisa, categorias e analytics.
-5. Separar pedidos de cliente.
-6. Separar perfil profissional e membership/trial.
-7. Transformar `app.js` num ponto de arranque/orquestração.
-8. Atualizar `account.js` para reutilizar o mesmo cliente Supabase.
-9. Adicionar testes unitários às funções puras.
-10. Validar manualmente todos os fluxos antes de merge para `main`.
+- [x] Extrair configuração pública e criação do cliente Supabase.
+- [x] Extrair funções utilitárias sem dependências de interface.
+- [x] Separar autenticação e sessão.
+- [ ] Separar pesquisa, categorias e analytics.
+- [ ] Separar pedidos de cliente.
+- [ ] Separar perfil profissional e membership/trial.
+- [ ] Transformar `app.js` num ponto de arranque/orquestração.
+- [ ] Atualizar `account.js` para reutilizar o mesmo cliente Supabase.
+- [ ] Adicionar testes unitários às funções puras.
+- [ ] Validar manualmente todos os fluxos antes de merge para `main`.
+
+## O que mudou na etapa de autenticação
+
+A autenticação deixou de estar implementada diretamente no `app.js`.
+
+O módulo `js/auth.js` passou a ser responsável por:
+- obter e manter a sessão atual
+- login e logout
+- criação de conta
+- redirect de confirmação de email
+- mensagens amigáveis para erros frequentes
+- prevenção de múltiplos submits
+- retomar a intenção original do utilizador após autenticação
+
+O antigo `auth-ui.js` e o monkeypatch inline de `signUp` no HTML foram removidos porque essas responsabilidades passaram a ter um único dono.
 
 ## Critérios de aceitação
 
